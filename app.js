@@ -13,6 +13,7 @@ class GraphiteApp {
     this.currentPressure = 0;
     this.canvasSizeMode = 'auto';
     this.settings = { grade: 4, size: 8, opacity: 100, paper: 'medium', usePressure: true };
+    this.graphiteBlendThreshold = 18; // only consider neighbors darker than this when smearing
     this.grades = {
       0: { name: '4H', hardness: 0.3, opacity: 0.15, texture: 0.9 },
       1: { name: '3H', hardness: 0.35, opacity: 0.2, texture: 0.85 },
@@ -256,31 +257,35 @@ class GraphiteApp {
     if (sw <= 0 || sh <= 0) return;
     const imageData = ctx.getImageData(sx, sy, sw, sh);
     const data = imageData.data;
-    const baseLift = 0.01 + pressure * 0.03;
+    const baseLift = 0.003 + pressure * 0.009;
+    const dabChance = 0.5 + pressure * 0.4;
     for (let py = 0; py < sh; py++) {
       for (let px = 0; px < sw; px++) {
+        if (Math.random() > dabChance) continue;
         const i = (py * sw + px) * 4;
         const origAlpha = data[i + 3];
-        if (origAlpha < 3) continue;
+        if (origAlpha < 6) continue;
         const dx = px - sw/2, dy = py - sh/2;
         const dist = Math.sqrt(dx*dx + dy*dy) / radius;
         if (dist > 1) continue;
-        const falloff = Math.pow(1 - dist, 2);
+        const falloff = Math.pow(1 - dist, 3);
         const localGrain = this.getGrain(sx + px, sy + py);
-        const grainMod = 0.3 + localGrain * 0.7;
-        const patchiness = 0.3 + Math.random() * 0.7;
+        const grainMod = 0.4 + localGrain * 0.6;
+        const patchiness = 0.5 + Math.random() * 0.5;
         const lift = baseLift * falloff * grainMod * patchiness;
-        data[i + 3] = Math.max(0, origAlpha - origAlpha * lift);
+        const delta = Math.min(origAlpha, Math.round(lift * 255));
+        if (delta === 0) continue;
+        data[i + 3] = origAlpha - delta;
       }
     }
     ctx.putImageData(imageData, sx, sy);
   }
-  // Fan brush: wide feathery blur - ONLY smooths existing graphite, never adds
+  // Fan brush: chamois-like smear that pulls the darkest neighbors softly
   drawFanBrush(x, y, pressure, from, to) {
     const ctx = this.ctx;
     const width = Math.max(40, this.settings.size * 6);
     const height = Math.max(15, this.settings.size * 1.5);
-    const strength = 0.02 + pressure * 0.04;
+    const strength = 0.025 + pressure * 0.06;
     const sx = Math.max(0, Math.floor(x - width/2));
     const sy = Math.max(0, Math.floor(y - height/2));
     const sw = Math.min(this.drawingCanvas.width - sx, Math.ceil(width));
@@ -289,39 +294,41 @@ class GraphiteApp {
     const imageData = ctx.getImageData(sx, sy, sw, sh);
     const data = imageData.data;
     const origData = new Uint8ClampedArray(data);
-    const numStrands = 8, strandSpacing = sw / numStrands;
+    const strandSpacing = Math.max(1, sw / Math.max(1, Math.floor(sw / 6)));
+    const threshold = this.graphiteBlendThreshold;
     for (let py = 0; py < sh; py++) {
       for (let px = 0; px < sw; px++) {
         const i = (py * sw + px) * 4;
-        const origAlpha = origData[i + 3];
-        if (origAlpha < 10) continue;
+        const destAlpha = origData[i + 3];
         const cx = (px - sw/2) / (sw/2), cy = (py - sh/2) / (sh/2);
         const d = Math.sqrt(cx*cx + cy*cy*4);
         if (d > 1) continue;
         const strandPos = (px % strandSpacing) / strandSpacing;
         const feather = Math.sin(strandPos * Math.PI) * 0.5 + 0.5;
         const falloff = (1 - d) * feather;
-        if (falloff < 0.05) continue;
-        let totalAlpha = 0, count = 0;
+        if (falloff < 0.04) continue;
+        let maxAlpha = 0;
         const k = 2;
         for (let ky = -k; ky <= k; ky++) {
           for (let kx = -k; kx <= k; kx++) {
             const nx = px + kx, ny = py + ky;
             if (nx >= 0 && nx < sw && ny >= 0 && ny < sh) {
               const ni = (ny * sw + nx) * 4;
-              if (origData[ni + 3] > 5) { totalAlpha += origData[ni + 3]; count++; }
+              const neighborAlpha = origData[ni + 3];
+              if (neighborAlpha <= threshold) continue;
+              maxAlpha = Math.max(maxAlpha, neighborAlpha);
             }
           }
         }
-        if (count === 0) continue;
-        const avgAlpha = totalAlpha / count;
-        const blend = falloff * strength;
-        const blended = Math.round(origAlpha * (1 - blend) + avgAlpha * blend); data[i + 3] = Math.max(origAlpha, blended);
+        if (maxAlpha <= destAlpha) continue;
+        const blend = Math.min(1, falloff * strength * 1.2);
+        const smear = destAlpha + (maxAlpha - destAlpha) * blend;
+        data[i + 3] = Math.min(255, Math.round(smear));
       }
     }
     ctx.putImageData(imageData, sx, sy);
   }
-  // Powder brush: big soft circular blur - ONLY smooths existing graphite
+  // Powder brush: soft chamois spread that only draws from the darkest neighbors
   drawPowderBrush(x, y, pressure, from, to) {
     const ctx = this.ctx;
     const size = Math.max(40, this.settings.size * 5);
@@ -335,39 +342,38 @@ class GraphiteApp {
     const imageData = ctx.getImageData(sx, sy, sw, sh);
     const data = imageData.data;
     const origData = new Uint8ClampedArray(data);
+    const threshold = this.graphiteBlendThreshold;
     for (let py = 0; py < sh; py++) {
       for (let px = 0; px < sw; px++) {
         const i = (py * sw + px) * 4;
-        const origAlpha = origData[i + 3];
-        if (origAlpha < 10) continue;
+        const destAlpha = origData[i + 3];
         const dx = px - sw/2, dy = py - sh/2;
         const dist = Math.sqrt(dx*dx + dy*dy) / radius;
         if (dist > 1) continue;
         const falloff = Math.pow(1 - dist, 2);
-        if (falloff < 0.05) continue;
-        let totalAlpha = 0, count = 0;
+        if (falloff < 0.04) continue;
+        let maxAlpha = 0;
         const kernelSize = Math.ceil(3 + pressure * 3);
         for (let ky = -kernelSize; ky <= kernelSize; ky++) {
           for (let kx = -kernelSize; kx <= kernelSize; kx++) {
             const nx = px + kx, ny = py + ky;
             if (nx >= 0 && nx < sw && ny >= 0 && ny < sh) {
               const ni = (ny * sw + nx) * 4;
-              if (origData[ni + 3] > 5) {
-                const w = 1 / (1 + Math.sqrt(kx*kx + ky*ky));
-                totalAlpha += origData[ni + 3] * w; count += w;
-              }
+              const neighborAlpha = origData[ni + 3];
+              if (neighborAlpha <= threshold) continue;
+              maxAlpha = Math.max(maxAlpha, neighborAlpha);
             }
           }
         }
-        if (count === 0) continue;
-        const avgAlpha = totalAlpha / count;
-        const blend = falloff * strength;
-        const blended = Math.round(origAlpha * (1 - blend) + avgAlpha * blend); data[i + 3] = Math.max(origAlpha, blended);
+        if (maxAlpha <= destAlpha) continue;
+        const blend = Math.min(1, falloff * strength * 1.25);
+        const smear = destAlpha + (maxAlpha - destAlpha) * blend;
+        data[i + 3] = Math.min(255, Math.round(smear));
       }
     }
     ctx.putImageData(imageData, sx, sy);
   }
-  // Tortillon: directional smear - ONLY moves existing graphite
+  // Tortillon: directional smear that drags the darkest graphite along the stroke
   drawTortillon(x, y, pressure, from, to) {
     const ctx = this.ctx;
     const size = Math.max(8, this.settings.size * 1.5);
@@ -386,26 +392,34 @@ class GraphiteApp {
     const data = imageData.data;
     const origData = new Uint8ClampedArray(data);
     const localX = x - sx, localY = y - sy;
+    const threshold = this.graphiteBlendThreshold;
     for (let py = 0; py < sh; py++) {
       for (let px = 0; px < sw; px++) {
         const i = (py * sw + px) * 4;
         const origAlpha = origData[i + 3];
-        if (origAlpha < 5) continue;
+        if (origAlpha < 3) continue;
         const bx = px - localX, by = py - localY;
         const d = Math.sqrt(bx*bx + by*by) / radius;
         if (d > 1.5) continue;
         const falloff = Math.max(0, Math.pow(1 - Math.min(d, 1), 2));
         if (falloff < 0.05) continue;
         const sampleDist = 1 + pressure * 2;
-        const srcX = Math.round(px - dirX * sampleDist);
-        const srcY = Math.round(py - dirY * sampleDist);
-        if (srcX >= 0 && srcX < sw && srcY >= 0 && srcY < sh) {
-          const si = (srcY * sw + srcX) * 4;
-          const srcAlpha = origData[si + 3];
-          if (srcAlpha < 5) continue;
-          const blend = falloff * strength;
-          data[i + 3] = Math.round(origAlpha * (1 - blend) + srcAlpha * blend);
+        let maxAlpha = 0;
+        const steps = 3;
+        for (let step = 1; step <= steps; step++) {
+          const srcX = Math.round(px - dirX * sampleDist * step * 0.8);
+          const srcY = Math.round(py - dirY * sampleDist * step * 0.8);
+          if (srcX >= 0 && srcX < sw && srcY >= 0 && srcY < sh) {
+            const si = (srcY * sw + srcX) * 4;
+            const srcAlpha = origData[si + 3];
+            if (srcAlpha <= threshold) continue;
+            maxAlpha = Math.max(maxAlpha, srcAlpha);
+          }
         }
+        if (maxAlpha <= origAlpha) continue;
+        const blend = Math.min(1, falloff * strength * 1.3);
+        const smear = origAlpha + (maxAlpha - origAlpha) * blend;
+        data[i + 3] = Math.min(255, Math.round(smear));
       }
     }
     ctx.putImageData(imageData, sx, sy);
