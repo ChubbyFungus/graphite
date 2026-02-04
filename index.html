@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Graphite Studio</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="toolbar">
+      <div class="logo">
+        <span class="logo-icon">✏️</span>
+        <span class="logo-text">Graphite</span>
+      </div>
+
+      <div class="tool-section">
+        <label>Draw</label>
+        <div class="tool-buttons">
+          <button class="tool-btn active" data-tool="pencil" title="Pencil (P)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="tool-section">
+        <label>Erase</label>
+        <div class="tool-buttons">
+          <button class="tool-btn" data-tool="eraser-hard" title="Hard Eraser (E)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/>
+              <path d="M22 21H7"/><path d="m5 11 9 9"/>
+            </svg>
+          </button>
+          <button class="tool-btn" data-tool="eraser-kneaded" title="Kneaded Eraser (K)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="8" stroke-dasharray="4 2"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="tool-section">
+        <label>Blend</label>
+        <div class="tool-buttons">
+          <button class="tool-btn" data-tool="tortillon" title="Tortillon (T)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M6 20L18 4"/><circle cx="18" cy="4" r="2"/>
+            </svg>
+          </button>
+          <button class="tool-btn" data-tool="fan-brush" title="Fan Brush (F)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 20v-8"/>
+              <path d="M4 8c2-4 6-6 8-6s6 2 8 6"/>
+              <path d="M6 10c1.5-2 4-4 6-4s4.5 2 6 4"/>
+              <path d="M8 12c1-1 3-2 4-2s3 1 4 2"/>
+            </svg>
+          </button>
+          <button class="tool-btn" data-tool="powder-brush" title="Powder Brush (B)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <ellipse cx="12" cy="6" rx="8" ry="4"/>
+              <path d="M12 10v10"/>
+              <path d="M10 20h4"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="tool-section">
+        <label>Grade <span class="value" id="grade-display">HB</span></label>
+        <input type="range" id="grade-slider" min="0" max="9" value="4" class="slider">
+        <div class="grade-labels">
+          <span>4H</span><span>HB</span><span>8B</span>
+        </div>
+      </div>
+
+      <div class="tool-section">
+        <label>Size <span class="value" id="size-display">8px</span></label>
+        <input type="range" id="size-slider" min="1" max="100" value="8" class="slider">
+      </div>
+
+      <div class="tool-section">
+        <label>Opacity <span class="value" id="opacity-display">100%</span></label>
+        <input type="range" id="opacity-slider" min="5" max="100" value="100" class="slider">
+      </div>
+
+      <div class="tool-section">
+        <label>Paper Texture</label>
+        <select id="paper-select">
+          <option value="smooth">Smooth (Hot Press)</option>
+          <option value="medium" selected>Medium Tooth</option>
+          <option value="rough">Rough (Cold Press)</option>
+          <option value="toned">Toned Gray</option>
+        </select>
+      </div>
+
+      <div class="tool-section">
+        <label>Canvas Size</label>
+        <select id="canvas-size-select">
+          <option value="auto" selected>Auto (fit window)</option>
+          <option value="1920x1080">1920×1080 (HD)</option>
+          <option value="2560x1440">2560×1440 (2K)</option>
+          <option value="3840x2160">3840×2160 (4K)</option>
+          <option value="2480x3508">A4 Portrait (300dpi)</option>
+          <option value="3508x2480">A4 Landscape (300dpi)</option>
+        </select>
+      </div>
+
+      <div class="tool-section">
+        <label>Pressure</label>
+        <div class="pressure-indicator">
+          <div class="pressure-bar" id="pressure-bar"></div>
+        </div>
+        <label class="checkbox-label">
+          <input type="checkbox" id="pressure-toggle" checked>
+          <span>Use tablet pressure</span>
+        </label>
+      </div>
+
+      <div class="tool-section actions">
+        <button class="action-btn" id="undo-btn" title="Undo (Ctrl+Z)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
+          </svg>
+          Undo
+        </button>
+        <button class="action-btn" id="redo-btn" title="Redo (Ctrl+Y)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/>
+          </svg>
+          Redo
+        </button>
+        <button class="action-btn" id="clear-btn" title="Clear Canvas">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+          </svg>
+          Clear
+        </button>
+        <button class="action-btn primary" id="save-btn" title="Save PNG">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Save
+        </button>
+      </div>
+
+      <div class="stats">
+        <span id="stats-display">Ready</span>
+      </div>
+    </aside>
+
+    <main class="canvas-area">
+      <div class="canvas-container" id="canvas-container">
+        <canvas id="paper-canvas"></canvas>
+        <canvas id="drawing-canvas"></canvas>
+      </div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
