@@ -1,0 +1,6 @@
+sample,measurement,target_min,target_max,observed,notes
+4H_light,tone_delta,0.020,0.080,0.045,hard pencil should stay subtle
+8B_heavy,tone_delta,0.180,0.420,0.290,soft heavy stroke should darken strongly
+cold_press_powder,tooth_response,0.120,0.360,0.220,powder should catch visibly on tooth
+regular_eraser_damage,damage_delta,0.010,0.090,0.035,regular eraser should abrade modestly
+kneaded_lift,loose_lift_ratio,0.040,0.280,0.210,kneaded eraser should lift selectively

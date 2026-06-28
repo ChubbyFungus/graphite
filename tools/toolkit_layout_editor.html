@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Graphite Toolkit Layout Editor</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #11110f;
+      --panel: #1a1916;
+      --line: #39342b;
+      --text: #ece4d2;
+      --muted: #a89d88;
+      --accent: #d7a948;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Segoe UI, Arial, sans-serif;
+      overflow: hidden;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 1fr 330px;
+      height: 100vh;
+    }
+
+    .stage-wrap {
+      position: relative;
+      min-width: 0;
+      overflow: auto;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px),
+        linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+        #0c0c0b;
+      background-size: 24px 24px;
+      padding: 28px;
+    }
+
+    .stage {
+      position: relative;
+      width: 1280px;
+      height: 760px;
+      transform-origin: top left;
+      background: #151310;
+      box-shadow: 0 18px 60px rgba(0,0,0,.55);
+      overflow: visible;
+    }
+
+    .background {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 520px;
+      object-fit: fill;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .asset {
+      position: absolute;
+      transform-origin: center center;
+      cursor: grab;
+      touch-action: none;
+      outline: 1px solid transparent;
+    }
+
+    .asset.selected {
+      outline: 2px solid var(--accent);
+      filter: drop-shadow(0 0 8px rgba(215,169,72,.45));
+    }
+
+    .asset img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .asset.stretch img {
+      object-fit: fill;
+    }
+
+    .asset.hidden { display: none; }
+
+    .sidebar {
+      border-left: 1px solid var(--line);
+      background: var(--panel);
+      padding: 16px;
+      overflow: auto;
+    }
+
+    h1 {
+      font-size: 18px;
+      margin: 0 0 12px;
+      font-weight: 650;
+    }
+
+    h2 {
+      font-size: 12px;
+      margin: 18px 0 8px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    label {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin: 10px 0 4px;
+    }
+
+    select, input, button, textarea {
+      width: 100%;
+      background: #11100e;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+      background: #242018;
+    }
+
+    button:hover { border-color: var(--accent); }
+
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .asset-list {
+      display: grid;
+      gap: 6px;
+      max-height: 290px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .asset-row {
+      display: grid;
+      grid-template-columns: 24px 1fr;
+      gap: 8px;
+      align-items: center;
+      padding: 6px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #13120f;
+    }
+
+    .asset-row.active { border-color: var(--accent); }
+
+    .asset-row input { width: auto; }
+
+    textarea {
+      min-height: 180px;
+      resize: vertical;
+      font-family: Consolas, ui-monospace, monospace;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="stage-wrap">
+      <div id="stage" class="stage">
+        <img id="background" class="background" alt="" src="../native/Graphite.EngineSlice/assets/ui/imagegen-roll-case-base-no-pocket-fronts.png?v=20260518-1445">
+      </div>
+    </section>
+
+    <aside class="sidebar">
+      <h1>Toolkit Layout Editor</h1>
+      <p class="hint">Drag the real assets into place. The base image has the pocket fronts removed; eraser pockets and the full pencil pocket row are separate kit layers.</p>
+
+      <h2>Surface</h2>
+      <label for="backgroundSelect">Background</label>
+      <select id="backgroundSelect">
+        <option value="../native/Graphite.EngineSlice/assets/ui/imagegen-roll-case-base-no-pocket-fronts.png">User fixed leather roll base</option>
+        <option value="../native/Graphite.EngineSlice/assets/ui/roll-case-base-no-pocket-fronts.png">Old segmented roll, compare only</option>
+        <option value="../native/Graphite.EngineSlice/assets/ui/roll-case-nostrap-imagegen-source.png">Leather roll, original no strap</option>
+        <option value="../native/Graphite.EngineSlice/assets/ui/roll-case-imagegen-source.png">Leather roll, original source</option>
+        <option value="../native/Graphite.EngineSlice/assets/references/graphite-tray-target.png">Reference image</option>
+        <option value="../native/Graphite.EngineSlice/assets/ui/graphite-empty-tool-tray.png">Old molded tray, compare only</option>
+      </select>
+
+      <label for="zoom">Zoom</label>
+      <input id="zoom" type="range" min="35" max="120" value="65">
+
+      <h2>Selected Asset</h2>
+      <label for="assetName">Name</label>
+      <input id="assetName" readonly>
+      <div class="row">
+        <div>
+          <label for="x">X center</label>
+          <input id="x" type="number" step="1">
+        </div>
+        <div>
+          <label for="y">Y center</label>
+          <input id="y" type="number" step="1">
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <label for="w">Width</label>
+          <input id="w" type="number" step="1">
+        </div>
+        <div>
+          <label for="h">Height</label>
+          <input id="h" type="number" step="1">
+        </div>
+      </div>
+      <label for="rot">Rotation</label>
+      <input id="rot" type="number" step="1">
+      <label for="layer">Layer</label>
+      <input id="layer" type="number" step="1">
+
+      <h2>Assets</h2>
+      <div id="assetList" class="asset-list"></div>
+
+      <h2>Export</h2>
+      <button id="exportBtn">Export Layout</button>
+      <label for="exportText">Native coordinates</label>
+      <textarea id="exportText" spellcheck="false"></textarea>
+    </aside>
+  </main>
+
+  <script>
+    const ASSET_ROOT = '../native/Graphite.EngineSlice/assets/ui/';
+    const ASSET_VERSION = '20260518-1445';
+    const assets = [
+      { name: 'vinyl eraser', file: 'vinyl-eraser.png', x: 222, y: 110, w: 96, h: 96, rot: 90, layer: 20 },
+      { name: 'vinyl eraser pocket front', file: 'imagegen-eraser-pocket-front.png', x: 221, y: 148, w: 125, h: 78, rot: 0, layer: 50 },
+      { name: 'kneaded eraser', file: 'kneaded-eraser.png', x: 219, y: 299, w: 104, h: 104, rot: 0, layer: 20 },
+      { name: 'kneaded eraser pocket front', file: 'imagegen-eraser-pocket-front.png', x: 218, y: 348, w: 125, h: 78, rot: 0, layer: 50 },
+      { name: 'electric eraser', file: 'electric-eraser-horizontal.png', x: 350, y: 228, w: 58, h: 260, rot: 0, layer: 35 },
+      { name: 'electric eraser elastic', file: 'kit-elastic-band.png', x: 347, y: 264, w: 94, h: 19, rot: 0, layer: 60 },
+      { name: 'tortillon', file: 'tortillon-horizontal.png', x: 580, y: 230, w: 48, h: 300, rot: 0, layer: 35 },
+      { name: 'tortillon elastic', file: 'kit-elastic-band.png', x: 581, y: 221, w: 68, h: 14, rot: 0, layer: 60 },
+      { name: 'powder brush', file: 'powder-brush-upright.png', x: 433, y: 234, w: 64, h: 280, rot: 0, layer: 35 },
+      { name: 'powder brush elastic', file: 'kit-elastic-band.png', x: 434, y: 260, w: 40, h: 14, rot: 0, layer: 60 },
+      { name: 'fan brush', file: 'fan-brush-upright.png', x: 496, y: 253, w: 64, h: 280, rot: 0, layer: 35 },
+      { name: 'fan brush elastic', file: 'kit-elastic-band.png', x: 500, y: 260, w: 38, h: 14, rot: 0, layer: 60 },
+      { name: 'pencil 4H', file: 'pencil-4h-canvas.png', x: 647, y: 230, w: 24, h: 270, rot: 0, layer: 35 },
+      { name: 'pencil 4H elastic', file: 'kit-elastic-band.png', x: 650, y: 258, w: 38, h: 12, rot: 0, layer: 60 },
+      { name: 'pencil 3H', file: 'pencil-3h-canvas.png', x: 698, y: 230, w: 24, h: 270, rot: 0, layer: 35 },
+      { name: 'pencil 3H elastic', file: 'kit-elastic-band.png', x: 703, y: 258, w: 38, h: 12, rot: 0, layer: 60 },
+      { name: 'pencil 2H', file: 'pencil-2h-canvas.png', x: 746, y: 230, w: 24, h: 270, rot: 0, layer: 35 },
+      { name: 'pencil 2H elastic', file: 'kit-elastic-band.png', x: 752, y: 258, w: 38, h: 12, rot: 0, layer: 60 },
+      { name: 'pencil H', file: 'pencil-h-canvas.png', x: 796, y: 230, w: 24, h: 270, rot: 0, layer: 35 },
+      { name: 'pencil H elastic', file: 'kit-elastic-band.png', x: 800, y: 258, w: 38, h: 12, rot: 0, layer: 60 },
+      { name: 'pencil HB', file: 'pencil-hb-canvas.png', x: 844, y: 230, w: 24, h: 270, rot: 0, layer: 35 },
+      { name: 'pencil HB elastic', file: 'kit-elastic-band.png', x: 847, y: 258, w: 38, h: 12, rot: 0, layer: 60 },
+      { name: 'pencil B', file: 'pencil-b-canvas.png', x: 896, y: 230, w: 24, h: 270, rot: 0, layer: 35 },
+      { name: 'pencil B elastic', file: 'kit-elastic-band.png', x: 900, y: 258, w: 38, h: 12, rot: 0, layer: 60 },
+      { name: 'pencil 2B', file: 'pencil-2b-canvas.png', x: 945, y: 230, w: 24, h: 270, rot: 0, layer: 35 },
+      { name: 'pencil 2B elastic', file: 'kit-elastic-band.png', x: 949, y: 258, w: 38, h: 12, rot: 0, layer: 60 },
+      { name: 'pencil 4B', file: 'pencil-4b-canvas.png', x: 997, y: 230, w: 24, h: 270, rot: 0, layer: 35 },
+      { name: 'pencil 4B elastic', file: 'kit-elastic-band.png', x: 1002, y: 258, w: 38, h: 12, rot: 0, layer: 60 },
+      { name: 'pencil 6B', file: 'pencil-6b-canvas.png', x: 1047, y: 230, w: 24, h: 270, rot: 0, layer: 35 },
+      { name: 'pencil 6B elastic', file: 'kit-elastic-band.png', x: 1050, y: 258, w: 38, h: 12, rot: 0, layer: 60 },
+      { name: 'pencil 8B', file: 'pencil-8b-canvas.png', x: 1100, y: 230, w: 24, h: 270, rot: 0, layer: 35 },
+      { name: 'pencil 8B elastic', file: 'kit-elastic-band.png', x: 1099, y: 258, w: 38, h: 12, rot: 0, layer: 60 },
+      { name: 'pencil pocket row front', file: 'imagegen-pencil-pocket-row-front.png', x: 878, y: 356, w: 511, h: 92, rot: 0, layer: 50 },
+      { name: 'side pull tab', file: 'leather-side-tab.png', x: 1214, y: 260, w: 112, h: 46, rot: 180, layer: 70 },
+    ].map(asset => ({ ...asset, visible: true }));
+
+    const stage = document.getElementById('stage');
+    const assetList = document.getElementById('assetList');
+    const exportText = document.getElementById('exportText');
+    const controls = {
+      name: document.getElementById('assetName'),
+      x: document.getElementById('x'),
+      y: document.getElementById('y'),
+      w: document.getElementById('w'),
+      h: document.getElementById('h'),
+      rot: document.getElementById('rot'),
+      layer: document.getElementById('layer'),
+    };
+    let selected = null;
+    let drag = null;
+
+    function renderAsset(asset) {
+      let el = asset.el;
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'asset';
+        el.dataset.name = asset.name;
+          el.innerHTML = `<img alt="${asset.name}" src="${ASSET_ROOT + asset.file}?v=${ASSET_VERSION}">`;
+        el.addEventListener('pointerdown', event => beginDrag(event, asset));
+        stage.appendChild(el);
+        asset.el = el;
+      }
+      el.style.left = `${asset.x - asset.w / 2}px`;
+      el.style.top = `${asset.y - asset.h / 2}px`;
+      el.style.width = `${asset.w}px`;
+      el.style.height = `${asset.h}px`;
+      el.style.zIndex = asset.layer;
+      el.style.transform = `rotate(${asset.rot}deg)`;
+      el.classList.toggle('selected', asset === selected);
+      el.classList.toggle('hidden', !asset.visible);
+      el.classList.toggle('stretch', asset.file === 'kit-elastic-band.png');
+    }
+
+    function renderList() {
+      assetList.innerHTML = '';
+      assets.forEach(asset => {
+        const row = document.createElement('label');
+        row.className = `asset-row${asset === selected ? ' active' : ''}`;
+        row.innerHTML = `<input type="checkbox" ${asset.visible ? 'checked' : ''}><span>${asset.name}</span>`;
+        row.querySelector('input').addEventListener('change', event => {
+          asset.visible = event.target.checked;
+          render();
+        });
+        row.addEventListener('click', event => {
+          if (event.target.tagName !== 'INPUT') select(asset);
+        });
+        assetList.appendChild(row);
+      });
+    }
+
+    function renderControls() {
+      const has = Boolean(selected);
+      for (const input of Object.values(controls)) input.disabled = !has;
+      if (!selected) {
+        for (const input of Object.values(controls)) input.value = '';
+        return;
+      }
+      controls.name.value = selected.name;
+      controls.x.value = Math.round(selected.x);
+      controls.y.value = Math.round(selected.y);
+      controls.w.value = Math.round(selected.w);
+      controls.h.value = Math.round(selected.h);
+      controls.rot.value = Math.round(selected.rot);
+      controls.layer.value = Math.round(selected.layer);
+    }
+
+    function render() {
+      assets.forEach(renderAsset);
+      renderList();
+      renderControls();
+    }
+
+    function select(asset) {
+      selected = asset;
+      render();
+    }
+
+    function beginDrag(event, asset) {
+      event.preventDefault();
+      select(asset);
+      asset.el.setPointerCapture(event.pointerId);
+      drag = {
+        pointerId: event.pointerId,
+        asset,
+        startX: event.clientX,
+        startY: event.clientY,
+        assetX: asset.x,
+        assetY: asset.y,
+      };
+    }
+
+    window.addEventListener('pointermove', event => {
+      if (!drag || event.pointerId !== drag.pointerId) return;
+      const scale = Number(document.getElementById('zoom').value) / 100;
+      drag.asset.x = drag.assetX + (event.clientX - drag.startX) / scale;
+      drag.asset.y = drag.assetY + (event.clientY - drag.startY) / scale;
+      render();
+    });
+
+    window.addEventListener('pointerup', event => {
+      if (drag && event.pointerId === drag.pointerId) drag = null;
+    });
+
+    for (const key of ['x', 'y', 'w', 'h', 'rot', 'layer']) {
+      controls[key].addEventListener('input', () => {
+        if (!selected) return;
+        selected[key] = Number(controls[key].value);
+        render();
+      });
+    }
+
+    window.addEventListener('keydown', event => {
+      if (!selected || ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+      const step = event.shiftKey ? 10 : 1;
+      if (event.key === 'ArrowLeft') selected.x -= step;
+      else if (event.key === 'ArrowRight') selected.x += step;
+      else if (event.key === 'ArrowUp') selected.y -= step;
+      else if (event.key === 'ArrowDown') selected.y += step;
+      else return;
+      event.preventDefault();
+      render();
+    });
+
+    document.getElementById('backgroundSelect').addEventListener('change', event => {
+      document.getElementById('background').src = `${event.target.value}?v=${ASSET_VERSION}`;
+    });
+
+    document.getElementById('zoom').addEventListener('input', event => {
+      stage.style.transform = `scale(${Number(event.target.value) / 100})`;
+    });
+
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      const rows = assets
+        .filter(asset => asset.visible)
+        .map(asset => `${asset.name}: center=(${Math.round(asset.x)}, ${Math.round(asset.y)}) size=(${Math.round(asset.w)}, ${Math.round(asset.h)}) rot=${Math.round(asset.rot)} layer=${Math.round(asset.layer)}${asset.file ? ` file=${asset.file}` : ` kind=${asset.kind}`}`);
+      exportText.value = rows.join('\n');
+      exportText.select();
+    });
+
+    stage.style.transform = 'scale(.65)';
+    select(assets[0]);
+  </script>
+</body>
+</html>

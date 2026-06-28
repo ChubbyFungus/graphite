@@ -1,0 +1,16 @@
+build/
+.vs/
+out/
+
+imgui.ini
+*.log
+*.user
+__pycache__/
+*.pyc
+
+pen_input_diagnostics.csv
+realtime_stylus_status.txt
+
+native/Graphite.EngineSlice/assets/ui/_*.png
+native/Graphite.EngineSlice/assets/ui/*.before-*.png
+native/Graphite.EngineSlice/assets/ui/*.png.before-*

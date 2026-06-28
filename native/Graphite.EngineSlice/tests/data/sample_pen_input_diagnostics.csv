@@ -1,0 +1,4 @@
+packet,phase,source,x,y,rawScreenX,rawScreenY,pressure,rawPressure,rawPressureMax,tiltX,tiltY,rotation,hasRotation,orientation,velocityX,velocityY,speed,timestampUs,isTip,isEraser,barrelButton
+1,begin,WM_POINTER,100,120,1400,720,0.10,102,1024,0,0,0,0,0,0,0,0,1000000,1,0,0
+2,move,WM_POINTER,110,121,1410,721,0.42,430,1024,18,-7,0.35,1,0.1,500,50,502.49,1020000,1,0,1
+3,move,WinTab,118,125,1418,725,0.78,799,1024,22,4,0.42,1,0.2,450,70,455.41,1040000,1,1,0
