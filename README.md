@@ -1,5 +1,13 @@
 # Graphite CUDA App
 
+A native Windows sketching app that recreates the feel of graphite pencil on paper by modeling paper and graphite as evolving material state — not as an opacity brush. Pencil marks are deposits into paper height, roughness, binding, loose/bound graphite, compaction, and damage buffers; display tone and surface sheen are derived from that state in CUDA. Physical tools (pencil grades 4H–8B, regular/kneaded/electric erasers, tortillon, fan brush, powder brush, loose graphite) and paper presets are real material parameters. D3D12 presents; CUDA simulates.
+
+## License
+
+This is **source-available, not open source (yet)**. The code is published under the [PolyForm Noncommercial License 1.0.0](LICENSE.md): you're welcome to read it, learn from it, build it, and use it for any noncommercial purpose. Commercial use and redistribution require a license from the author. A paid, pre-built commercial release is planned — if you want to use Graphite commercially in the meantime, get in touch: brown.zac1989@gmail.com.
+
+## Repo Lane
+
 This repo is the CUDA/D3D12 native Graphite app lane after the June 9, 2026 extraction.
 
 ## Source Of Truth
