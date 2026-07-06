@@ -60,8 +60,13 @@ __device__ float gradeDepositStrength(PencilGrade grade)
 
 __device__ float gradeToneCapacity(PencilGrade grade, float pressure)
 {
-    const float base = anchoredGradeValue(grade, 0.30f, 0.50f, 0.82f);
-    const float pressureRoom = anchoredGradeValue(grade, 0.06f, 0.10f, 0.20f);
+    // Capacity ceilings re-anchored 2026-07-05 (probe: 16-pass saturation,
+    // display value targets 4H ~0.62, HB ~0.45, 2B ~0.30, 8B ~0.05).
+    // Grade separation lives in the MAX darkness a grade can build to:
+    // hard grades run out of depositable graphite at light values; only
+    // the softest B grades can reach true black.
+    const float base = anchoredGradeValue(grade, 0.16f, 0.28f, 0.60f);
+    const float pressureRoom = anchoredGradeValue(grade, 0.04f, 0.07f, 0.16f);
     return base + pressure * pressureRoom;
 }
 
@@ -758,7 +763,12 @@ __global__ void strokeKernel(
     const float broadTooth = smoothNoise(x - 17, y + 11, 19);
     const float paperGrain = clamp01(0.48f + fineTooth * 0.10f + fiberTooth * 0.08f + broadTooth * 0.05f + catchTooth * 0.12f - compaction[idx] * 0.06f);
     const float saturationGate = smooth01(toneRoom) * (0.16f + openTooth * 0.84f);
-    const float pressureDeposit = (0.0045f + powf(pressure, 1.45f) * 0.034f) * gradeStrength * pressureVariance;
+    // Rate re-anchored after exactly-once capsule ownership (2026-07-05):
+    // constants below were tuned when overlapping capsules multi-hit every
+    // pixel ~3-5x per pass. Single-coverage targets (tone = b*1.2 + l*0.85,
+    // one pass, p=0.5): 2H ~0.05, HB ~0.15, 2B ~0.25, 8B ~0.45. True
+    // physical anchoring comes from the material calibration protocol.
+    const float pressureDeposit = (0.075f + powf(pressure, 1.45f) * 0.56f) * gradeStrength * pressureVariance;
     const float deposit = edge * segmentDepositScale * saturationGate * pressureDeposit * (0.28f + softness * 0.62f) * (1.0f - speedFactor * 0.24f);
     const float contactCore = powf(edge, 2.4f) * segmentDepositScale * (0.72f + fineTooth * 0.28f) * saturationGate;
     const float loose = deposit * looseStrength * (0.84f + softness * 0.92f) * catchFactor * paperGrain * (0.22f + openTooth * 0.78f);

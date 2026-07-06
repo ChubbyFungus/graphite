@@ -96,7 +96,7 @@ int main()
     CudaGraphiteBackend backend;
     GraphiteBackendInit init{};
     init.width = 512;
-    init.height = 256;
+    init.height = 512;
     if (!backend.initialize(init)) { printf("init failed\n"); return 1; }
     backend.setPaperPreset(PaperPreset::ColdPress);
 
@@ -105,13 +105,61 @@ int main()
     params.grade = PencilGrade::HB;
     params.radiusPx = 3.0f;
 
-    runStroke(backend, params, 40.0f, 1.5f, 400.0f, 0.35f);   // slow
-    runStroke(backend, params, 90.0f, 10.0f, 400.0f, 0.35f);  // fast
-    runStroke(backend, params, 140.0f, 1.5f, 400.0f, 0.75f);  // slow heavy
+    // Grade sweep: single pass, medium pressure. Targets (tone = b*1.2+l*.85):
+    //   2H ~0.05 (visible, light) | HB ~0.15 | 2B ~0.25 | 8B ~0.45
+    struct Row { PencilGrade g; const char* name; float y; };
+    Row rows[] = {
+        { PencilGrade::TwoH,   "2H p=0.5 x1", 30.0f },
+        { PencilGrade::HB,     "HB p=0.5 x1", 60.0f },
+        { PencilGrade::TwoB,   "2B p=0.5 x1", 90.0f },
+        { PencilGrade::EightB, "8B p=0.5 x1", 120.0f },
+    };
+    for (const Row& r : rows)
+    {
+        params.grade = r.g;
+        runStroke(backend, params, r.y, 4.0f, 400.0f, 0.5f);
+    }
+    // multi-pass buildup: HB five passes should approach its capacity
+    params.grade = PencilGrade::HB;
+    for (int i = 0; i < 5; ++i) runStroke(backend, params, 160.0f, 4.0f, 400.0f, 0.5f);
+    // packetization invariance check (slow vs fast, same pressure)
+    params.grade = PencilGrade::TwoB;
+    runStroke(backend, params, 190.0f, 1.5f, 400.0f, 0.5f);
+    runStroke(backend, params, 220.0f, 12.0f, 400.0f, 0.5f);
 
-    profile(backend, "slow  step=1.5 p=0.35", 40.0f, 400.0f);
-    profile(backend, "fast  step=10  p=0.35", 90.0f, 400.0f);
-    profile(backend, "slow  step=1.5 p=0.75", 140.0f, 400.0f);
+    for (const Row& r : rows) profile(backend, r.name, r.y, 400.0f);
+    profile(backend, "HB p=0.5 x5 (buildup)", 160.0f, 400.0f);
+    profile(backend, "2B slow step=1.5", 190.0f, 400.0f);
+    profile(backend, "2B fast step=12 ", 220.0f, 400.0f);
+
+    // Saturation ceilings: scrub each grade 16 passes at p=0.7, report
+    // approx DISPLAY value (0.95=paper .. 0=black), the number the eye sees.
+    // Real-pencil targets: 4H >= ~0.60, HB ~0.45, 2B ~0.30, 8B <= ~0.08.
+    struct Sat { PencilGrade g; const char* name; float y; };
+    Sat sats[] = {
+        { PencilGrade::FourH,  "4H saturation", 30.0f + 210.0f },
+        { PencilGrade::HB,     "HB saturation", 60.0f + 210.0f },
+        { PencilGrade::TwoB,   "2B saturation", 90.0f + 210.0f },
+        { PencilGrade::EightB, "8B saturation", 120.0f + 210.0f },
+    };
+    for (const Sat& s : sats)
+    {
+        params.grade = s.g;
+        for (int i = 0; i < 16; ++i) runStroke(backend, params, s.y, 4.0f, 400.0f, 0.7f);
+    }
+    for (const Sat& s : sats)
+    {
+        float sumV = 0.0f; int n = 0;
+        for (int x = 24; x < 410; ++x)
+        {
+            const float loose = readMaterial(backend, backend.looseGraphite_, x, static_cast<int>(s.y));
+            const float bound = readMaterial(backend, backend.boundGraphite_, x, static_cast<int>(s.y));
+            const float graphite = fminf(1.0f, fmaxf(0.0f, bound * 1.38f + loose * 1.08f));
+            sumV += fmaxf(0.0f, 0.952f - graphite * 1.18f);
+            ++n;
+        }
+        printf("%s: displayValue=%.3f (16 passes p=0.7)\n", s.name, sumV / n);
+    }
     backend.shutdown();
     return 0;
 }

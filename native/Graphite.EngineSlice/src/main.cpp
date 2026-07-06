@@ -1110,7 +1110,7 @@ bool clientPointOverUi(const AppState& app, POINT point)
         pointInScreenRect(point, toolOptionsTabRect(app)) :
         pointInScreenRect(point, toolOptionsPanelRect(app));
     const bool overPaperPicker = app.paperPickerOpen && pointInScreenRect(point, paperPickerPanelRect(app));
-    const bool overCanvasLayers = pointInScreenRect(point, canvasLayersPanelRect(app));
+    const bool overCanvasLayers = app.showInputTrace && pointInScreenRect(point, canvasLayersPanelRect(app));
     const bool overPaperPanel = app.showInputTrace && point.x >= rightX && point.x <= rightX + 286 && point.y >= 276 && point.y <= 552;
     const bool overInputPanel = app.showInputTrace && point.x >= rightX && point.x <= rightX + 286 && point.y >= 568 && point.y <= 782;
     const bool overStatus = point.x >= 406 && point.x <= rightX && point.y >= bottomY && point.y <= bottomY + 72;
@@ -1692,7 +1692,7 @@ void drawImGui(AppState& app)
         ImGuiWindowFlags_NoScrollbar |
         ImGuiWindowFlags_NoScrollWithMouse;
 
-    drawCanvasLayersPanel(app, panelFlags);
+    if (app.showInputTrace) drawCanvasLayersPanel(app, panelFlags); // F12 toggles with the other panels
 
     if (app.showInputTrace)
     {
