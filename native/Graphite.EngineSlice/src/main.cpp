@@ -1641,7 +1641,7 @@ void drawImGui(AppState& app)
         drawList->AddLine(ImVec2(arrowX + size * 0.45f, arrowY), ImVec2(arrowX - size * 0.45f, arrowY + size * 0.70f), IM_COL32(8, 8, 8, 240), 3.0f);
     }
 
-    if (app.hasLastClientPoint && clientPointOverPaper(app, app.lastClientPoint))
+    if (app.hasLastClientPoint && (clientPointOverPaper(app, app.lastClientPoint) || (app.document && app.document->drawing())))
     {
         const auto& params = app.document->toolParams();
         const ImVec2 c(static_cast<float>(app.lastClientPoint.x), static_cast<float>(app.lastClientPoint.y));
@@ -2366,7 +2366,11 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         GetCursorPos(&screenPoint);
         POINT clientPoint = screenPoint;
         ScreenToClient(hwnd, &clientPoint);
-        if (app && clientPointOverUi(*app, clientPoint))
+        if (app && app->document && app->document->drawing())
+        {
+            SetCursor(nullptr);
+        }
+        else if (app && clientPointOverUi(*app, clientPoint))
         {
             SetCursor(LoadCursor(nullptr, IDC_HAND));
         }
@@ -2529,7 +2533,12 @@ LRESULT CALLBACK wndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
                 presentFrame(hwnd);
                 updateTitle(hwnd);
             }
-            return 1;
+            // With EnableMouseInPointer(TRUE), mouse input arrives as WM_POINTER.
+            // ImGui's Win32 backend only consumes legacy mouse messages, and
+            // Windows only synthesizes those when pointer messages reach
+            // DefWindowProc. Returning 1 here swallowed the message and made
+            // the whole ImGui panel unclickable.
+            return DefWindowProc(hwnd, message, wParam, lParam);
         }
     }
 

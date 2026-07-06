@@ -94,20 +94,22 @@ void GraphiteDocument::beginStroke(const StrokePacket& first)
     drawing_ = true;
     strokeChanged_ = false;
     lastPacket_ = first;
+    lastPacket_.strokeDistancePx = 0.0f;
     currentStroke_ = GraphiteEvent{};
     currentStroke_.kind = GraphiteEventKind::Stroke;
     currentStroke_.params = params_;
     currentStroke_.paperPreset = paperPreset_;
     currentStroke_.packets.clear();
-    currentStroke_.packets.push_back(first);
+    currentStroke_.packets.push_back(lastPacket_);
     if (params_.tool == ToolKind::KneadedEraser)
     {
-        StrokePacket dab = first;
+        StrokePacket dab = lastPacket_;
         dab.x += 0.08f;
         dab.y += 0.02f;
-        appendSegmentTiles(currentStroke_, first, dab, params_);
+        dab.strokeDistancePx = lastPacket_.strokeDistancePx + std::hypot(0.08f, 0.02f);
+        appendSegmentTiles(currentStroke_, lastPacket_, dab, params_);
         backend_.beginFrame();
-        backend_.submitStrokeSegment(first, dab, params_);
+        backend_.submitStrokeSegment(lastPacket_, dab, params_);
         backend_.endFrame();
         lastPacket_ = dab;
         strokeChanged_ = true;
@@ -118,13 +120,15 @@ void GraphiteDocument::beginStroke(const StrokePacket& first)
 void GraphiteDocument::submitStrokePacket(const StrokePacket& packet)
 {
     if (!drawing_) return;
-    appendSegmentTiles(currentStroke_, lastPacket_, packet, params_);
+    StrokePacket next = packet;
+    next.strokeDistancePx = lastPacket_.strokeDistancePx + std::hypot(packet.x - lastPacket_.x, packet.y - lastPacket_.y);
+    appendSegmentTiles(currentStroke_, lastPacket_, next, params_);
     backend_.beginFrame();
-    backend_.submitStrokeSegment(lastPacket_, packet, params_);
+    backend_.submitStrokeSegment(lastPacket_, next, params_);
     backend_.endFrame();
-    lastPacket_ = packet;
+    lastPacket_ = next;
     strokeChanged_ = true;
-    currentStroke_.packets.push_back(packet);
+    currentStroke_.packets.push_back(next);
 }
 
 void GraphiteDocument::submitStrokePackets(const std::vector<StrokePacket>& packets)
@@ -133,11 +137,13 @@ void GraphiteDocument::submitStrokePackets(const std::vector<StrokePacket>& pack
     backend_.beginFrame();
     for (const auto& packet : packets)
     {
-        appendSegmentTiles(currentStroke_, lastPacket_, packet, params_);
-        backend_.submitStrokeSegment(lastPacket_, packet, params_);
-        lastPacket_ = packet;
+        StrokePacket next = packet;
+        next.strokeDistancePx = lastPacket_.strokeDistancePx + std::hypot(packet.x - lastPacket_.x, packet.y - lastPacket_.y);
+        appendSegmentTiles(currentStroke_, lastPacket_, next, params_);
+        backend_.submitStrokeSegment(lastPacket_, next, params_);
+        lastPacket_ = next;
         strokeChanged_ = true;
-        currentStroke_.packets.push_back(packet);
+        currentStroke_.packets.push_back(next);
     }
     backend_.endFrame();
 }

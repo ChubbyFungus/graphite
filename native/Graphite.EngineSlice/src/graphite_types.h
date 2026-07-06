@@ -88,6 +88,10 @@ struct StrokePacket
     float velocityX = 0.0f;
     float velocityY = 0.0f;
     float speed = 0.0f;
+    // Arc length in canvas px from the start of the current stroke to this
+    // packet. Set by GraphiteDocument; lets material kernels distinguish true
+    // stroke boundaries from interior segment joints (stroke-start taper).
+    float strokeDistancePx = 0.0f;
     std::uint64_t timestampUs = 0;
     bool isTip = false;
     bool isEraser = false;

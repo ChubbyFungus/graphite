@@ -404,7 +404,11 @@ __global__ void strokeKernel(
     const float speed = fmaxf(from.speed, to.speed);
     const float speedFactor = clamp01(speed / 1800.0f);
     const float radius = effectiveToolRadiusPx(params);
-    const float segmentDepositScale = params.tool == ToolKind::Pencil ? smooth01(length / fmaxf(radius * 1.20f, 0.5f)) : 1.0f;
+    // With half-open capsule ownership (each pixel deposits from exactly one
+    // segment; see tRaw cull below) deposit per pixel must NOT scale with
+    // segment length - every stroke pixel is visited exactly once regardless
+    // of how finely the stroke is packetized.
+    const float segmentDepositScale = 1.0f;
     const std::uint32_t pixelsPerTile = tileSize * tileSize;
     const std::uint32_t n = blockIdx.x * blockDim.x + threadIdx.x;
     if (n >= touchedTileCount * pixelsPerTile) return;
@@ -417,7 +421,22 @@ __global__ void strokeKernel(
     if (x >= width || y >= height) return;
     const float px = static_cast<float>(x);
     const float py = static_cast<float>(y);
-    const float t = clamp01(((px - from.x) * dx + (py - from.y) * dy) / fmaxf(length * length, 0.001f));
+    const float tRaw = ((px - from.x) * dx + (py - from.y) * dy) / fmaxf(length * length, 0.001f);
+    // Half-open capsule ownership: each pencil pixel deposits from exactly
+    // one segment (its projection interval t in [0,1)). Without the culls,
+    // adjacent capsules' round caps both deposit around every packet joint,
+    // producing dark beads at packet spacing. The first segment of a stroke
+    // (strokeDistancePx == 0) keeps its start cap so marks begin rounded.
+    // Pencil only: deposit tools want exactly-once pixel ownership.
+    // Material-moving tools (tortillon/fan) keep overlapping applications -
+    // overlap IS the smear - but get per-segment dose normalization below
+    // so total effect per pass is packetization-independent.
+    if (params.tool == ToolKind::Pencil)
+    {
+        if (tRaw < 0.0f && from.strokeDistancePx > 0.0f) return;
+        if (tRaw >= 1.0f && length > 0.01f) return;
+    }
+    const float t = clamp01(tRaw);
     const float cx = from.x + dx * t;
     const float cy = from.y + dy * t;
     const float localX = px - cx;
@@ -474,10 +493,25 @@ __global__ void strokeKernel(
     float edge = powf(1.0f - dist, params.tool == ToolKind::Pencil ? 0.82f : 1.35f);
     if (params.tool == ToolKind::Pencil)
     {
-        const float endpointDistance = fminf(t * length, (1.0f - t) * length);
+        // Taper by TRUE stroke arc length (strokeDistancePx accumulated by
+        // GraphiteDocument), not per-segment endpoint distance. Per-segment
+        // feathering suppressed deposit at every interior packet joint,
+        // beading strokes at packet spacing (worst on slow strokes where
+        // every pixel of a ~1px segment sat inside the feather). With stroke
+        // distance, only the first ~feather px of the whole mark taper.
+        const float strokeDistanceAtPixel = from.strokeDistancePx + t * length;
         const float endpointFeather = fmaxf(radius * 1.25f, 0.85f);
         const float endpointFloor = 0.08f;
-        edge *= endpointFloor + (1.0f - endpointFloor) * smooth01(endpointDistance / endpointFeather);
+        edge *= endpointFloor + (1.0f - endpointFloor) * smooth01(strokeDistanceAtPixel / endpointFeather);
+    }
+    if (params.tool == ToolKind::Tortillon || params.tool == ToolKind::FanBrush)
+    {
+        // Dose normalization for material-moving tools: at high packet rates
+        // a pixel sits inside ~2*radius/length overlapping segment capsules
+        // per pass, multiplying the applied smear by packet density. Scale
+        // each application by length/(2*radius) so the accumulated dose per
+        // pass is the same regardless of how finely the stroke is sliced.
+        edge *= clamp01(length / fmaxf(radius * 2.0f, 0.5f));
     }
 
     if (params.tool == ToolKind::ElectricEraser)
@@ -590,12 +624,18 @@ __global__ void strokeKernel(
         const float lineExcess = fmaxf(0.0f, localTone - neighborTone);
         const float liftedLocalLoose = fminf(localLoose, edge * lineExcess * (0.030f + blendPressure * 0.115f));
         const float softenedBound = fminf(localBound, edge * lineExcess * (0.0020f + blendPressure * 0.010f));
+        // ATOMIC cross-pixel writes: the drag scatter-writes a NEIGHBOR pixel
+        // while that pixel's own thread writes itself in the same launch.
+        // Plain stores lose one of the two updates along warp-coherent runs,
+        // which rendered as fine streak bands. Atomic adds make concurrent
+        // updates sum instead of clobbering. (Values are re-clamped by every
+        // consumer; transient sub-epsilon overdraft is visually harmless.)
         if (separateSource)
         {
-            looseGraphite[srcIdx] = fmaxf(0.0f, looseGraphite[srcIdx] - liftedFromSource);
+            atomicAdd(&looseGraphite[srcIdx], -liftedFromSource);
         }
-        looseGraphite[idx] = clamp01(localLoose - liftedLocalLoose + liftedFromSource * 0.72f + redepositLoad);
-        boundGraphite[idx] = clamp01(localBound - softenedBound + liftedFromSource * 0.07f);
+        atomicAdd(&looseGraphite[idx], -liftedLocalLoose + liftedFromSource * 0.72f + redepositLoad);
+        atomicAdd(&boundGraphite[idx], -softenedBound + liftedFromSource * 0.07f);
         captureToolLoad(toolLoads, loadIndex, liftedFromSource * 0.21f + liftedLocalLoose * 0.45f + softenedBound * 0.65f);
         compaction[idx] = clamp01(compaction[idx] + edge * pressure * 0.009f);
         return;
@@ -1370,28 +1410,33 @@ bool CudaGraphiteBackend::initialize(const GraphiteBackendInit& init)
     if (!check(cudaMalloc(&looseGraphiteSum_, sizeof(float)), "allocate loose graphite sum")) return false;
     if (!check(cudaMalloc(&boundGraphiteSum_, sizeof(float)), "allocate bound graphite sum")) return false;
 
-    cudaExternalMemoryHandleDesc externalDesc{};
-    externalDesc.type = cudaExternalMemoryHandleTypeD3D12Resource;
-    externalDesc.handle.win32.handle = init.d3d12SharedDisplayHandle;
-    externalDesc.size = init.d3d12SharedDisplayBytes;
-    externalDesc.flags = cudaExternalMemoryDedicated;
-    if (!check(cudaImportExternalMemory(reinterpret_cast<cudaExternalMemory_t*>(&displayExternal_), &externalDesc), "import D3D12 display texture")) return false;
+    // Headless mode (tests/probes): no D3D12 display handle means material
+    // simulation only, no display surface. Display writes are skipped.
+    if (init.d3d12SharedDisplayHandle)
+    {
+        cudaExternalMemoryHandleDesc externalDesc{};
+        externalDesc.type = cudaExternalMemoryHandleTypeD3D12Resource;
+        externalDesc.handle.win32.handle = init.d3d12SharedDisplayHandle;
+        externalDesc.size = init.d3d12SharedDisplayBytes;
+        externalDesc.flags = cudaExternalMemoryDedicated;
+        if (!check(cudaImportExternalMemory(reinterpret_cast<cudaExternalMemory_t*>(&displayExternal_), &externalDesc), "import D3D12 display texture")) return false;
 
-    cudaExternalMemoryMipmappedArrayDesc mipDesc{};
-    mipDesc.offset = 0;
-    mipDesc.formatDesc = cudaCreateChannelDesc<uchar4>();
-    mipDesc.extent = make_cudaExtent(width_, height_, 0);
-    mipDesc.flags = cudaArraySurfaceLoadStore;
-    mipDesc.numLevels = 1;
-    if (!check(cudaExternalMemoryGetMappedMipmappedArray(reinterpret_cast<cudaMipmappedArray_t*>(&displayMipmappedArray_), reinterpret_cast<cudaExternalMemory_t>(displayExternal_), &mipDesc), "map D3D12 display texture")) return false;
+        cudaExternalMemoryMipmappedArrayDesc mipDesc{};
+        mipDesc.offset = 0;
+        mipDesc.formatDesc = cudaCreateChannelDesc<uchar4>();
+        mipDesc.extent = make_cudaExtent(width_, height_, 0);
+        mipDesc.flags = cudaArraySurfaceLoadStore;
+        mipDesc.numLevels = 1;
+        if (!check(cudaExternalMemoryGetMappedMipmappedArray(reinterpret_cast<cudaMipmappedArray_t*>(&displayMipmappedArray_), reinterpret_cast<cudaExternalMemory_t>(displayExternal_), &mipDesc), "map D3D12 display texture")) return false;
 
-    cudaArray_t levelArray{};
-    if (!check(cudaGetMipmappedArrayLevel(&levelArray, reinterpret_cast<cudaMipmappedArray_t>(displayMipmappedArray_), 0), "get display texture mip level")) return false;
+        cudaArray_t levelArray{};
+        if (!check(cudaGetMipmappedArrayLevel(&levelArray, reinterpret_cast<cudaMipmappedArray_t>(displayMipmappedArray_), 0), "get display texture mip level")) return false;
 
-    cudaResourceDesc surfaceDesc{};
-    surfaceDesc.resType = cudaResourceTypeArray;
-    surfaceDesc.res.array.array = levelArray;
-    if (!check(cudaCreateSurfaceObject(reinterpret_cast<cudaSurfaceObject_t*>(&displaySurface_), &surfaceDesc), "create display surface")) return false;
+        cudaResourceDesc surfaceDesc{};
+        surfaceDesc.resType = cudaResourceTypeArray;
+        surfaceDesc.res.array.array = levelArray;
+        if (!check(cudaCreateSurfaceObject(reinterpret_cast<cudaSurfaceObject_t*>(&displaySurface_), &surfaceDesc), "create display surface")) return false;
+    }
 
     if (init.d3d12CudaFenceHandle)
     {
@@ -1803,6 +1848,7 @@ void CudaGraphiteBackend::importSketchMaterial(const ImportedSketchMaterial& mat
 
 void CudaGraphiteBackend::endFrame()
 {
+    if (!displaySurface_) return; // headless: material state only, no display
     const int count = static_cast<int>(width_ * height_);
     const cudaSurfaceObject_t surface = static_cast<cudaSurfaceObject_t>(displaySurface_);
     if (forceFullRender_ || !tileTouchedDevice_)
