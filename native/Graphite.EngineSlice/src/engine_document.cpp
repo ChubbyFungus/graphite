@@ -117,11 +117,42 @@ void GraphiteDocument::beginStroke(const StrokePacket& first)
     }
 }
 
+namespace
+{
+// Velocity continuity across input messages. The input adapters can only
+// derive motion within one message batch, and WM_POINTER usually delivers a
+// single packet per message - so packet speed arrived as 0 forever and every
+// speed-dependent material behavior was dead. The document owns cross-packet
+// continuity, so motion is derived here, lightly smoothed (EMA) to ride out
+// timestamp jitter and pointer coalescing.
+void deriveMotion(const StrokePacket& previous, StrokePacket& next, float stepPx)
+{
+    const std::uint64_t dtUs = next.timestampUs > previous.timestampUs ? next.timestampUs - previous.timestampUs : 0;
+    if (dtUs == 0) // duplicate/garbled timestamp: inherit previous motion
+    {
+        next.velocityX = previous.velocityX;
+        next.velocityY = previous.velocityY;
+        next.speed = previous.speed;
+        return;
+    }
+    const float dt = static_cast<float>(dtUs) / 1000000.0f;
+    const float instantVx = (next.x - previous.x) / dt;
+    const float instantVy = (next.y - previous.y) / dt;
+    const float blend = 0.65f;
+    next.velocityX = instantVx * blend + previous.velocityX * (1.0f - blend);
+    next.velocityY = instantVy * blend + previous.velocityY * (1.0f - blend);
+    next.speed = std::sqrt(next.velocityX * next.velocityX + next.velocityY * next.velocityY);
+    (void)stepPx;
+}
+}
+
 void GraphiteDocument::submitStrokePacket(const StrokePacket& packet)
 {
     if (!drawing_) return;
     StrokePacket next = packet;
-    next.strokeDistancePx = lastPacket_.strokeDistancePx + std::hypot(packet.x - lastPacket_.x, packet.y - lastPacket_.y);
+    const float stepPx = std::hypot(packet.x - lastPacket_.x, packet.y - lastPacket_.y);
+    next.strokeDistancePx = lastPacket_.strokeDistancePx + stepPx;
+    deriveMotion(lastPacket_, next, stepPx);
     appendSegmentTiles(currentStroke_, lastPacket_, next, params_);
     backend_.beginFrame();
     backend_.submitStrokeSegment(lastPacket_, next, params_);
@@ -138,7 +169,9 @@ void GraphiteDocument::submitStrokePackets(const std::vector<StrokePacket>& pack
     for (const auto& packet : packets)
     {
         StrokePacket next = packet;
-        next.strokeDistancePx = lastPacket_.strokeDistancePx + std::hypot(packet.x - lastPacket_.x, packet.y - lastPacket_.y);
+        const float stepPx = std::hypot(packet.x - lastPacket_.x, packet.y - lastPacket_.y);
+        next.strokeDistancePx = lastPacket_.strokeDistancePx + stepPx;
+        deriveMotion(lastPacket_, next, stepPx);
         appendSegmentTiles(currentStroke_, lastPacket_, next, params_);
         backend_.submitStrokeSegment(lastPacket_, next, params_);
         lastPacket_ = next;

@@ -769,8 +769,25 @@ __global__ void strokeKernel(
     // one pass, p=0.5): 2H ~0.05, HB ~0.15, 2B ~0.25, 8B ~0.45. True
     // physical anchoring comes from the material calibration protocol.
     const float pressureDeposit = (0.075f + powf(pressure, 1.45f) * 0.56f) * gradeStrength * pressureVariance;
-    const float deposit = edge * segmentDepositScale * saturationGate * pressureDeposit * (0.28f + softness * 0.62f) * (1.0f - speedFactor * 0.24f);
-    const float contactCore = powf(edge, 2.4f) * segmentDepositScale * (0.72f + fineTooth * 0.28f) * saturationGate;
+    // Speed skip: a fast-moving tip rides the tooth peaks and never works
+    // graphite into the valleys - fast strokes go dry and broken while slow
+    // strokes fill solid. Gate valley deposit by speed; pressure pushes the
+    // tip back into the valleys and recovers some fill.
+    // The skip grain must be FINER than the stroke width and stretched
+    // ALONG the motion direction: paper-height noise alone (~9px cells) is
+    // wider than a pencil line, so valleys severed the full width in
+    // perpendicular bands regardless of stroke direction.
+    const float invSegLen = rsqrtf(fmaxf(length * length, 0.001f));
+    const float dirXn = dx * invSegLen;
+    const float dirYn = dy * invSegLen;
+    const float alongPx = px * dirXn + py * dirYn;
+    const float crossPx = px * (-dirYn) + py * dirXn;
+    const float dryGrain = smoothNoise(static_cast<int>(floorf(alongPx * 0.35f)) + 31, static_cast<int>(floorf(crossPx * 1.30f)) - 7, 3);
+    const float skipTooth = clamp01(heightTooth * 0.50f + dryGrain * 0.50f);
+    const float toothPeakiness = smooth01((skipTooth - 0.42f) * 5.5f);
+    const float speedSkip = 1.0f - speedFactor * (1.0f - toothPeakiness) * (0.92f - pressure * 0.35f);
+    const float deposit = edge * segmentDepositScale * saturationGate * pressureDeposit * (0.28f + softness * 0.62f) * (1.0f - speedFactor * 0.24f) * speedSkip;
+    const float contactCore = powf(edge, 2.4f) * segmentDepositScale * (0.72f + fineTooth * 0.28f) * saturationGate * speedSkip;
     const float loose = deposit * looseStrength * (0.84f + softness * 0.92f) * catchFactor * paperGrain * (0.22f + openTooth * 0.78f);
     const float bound = deposit * boundStrength * (0.045f + pressure * 0.16f) * (0.34f + catchTooth * 0.62f + binding * 0.20f) * (0.42f + paperGrain * 0.58f) * (0.30f + openTooth * 0.70f)
         + contactCore * pressureDeposit * (0.018f + pressure * 0.026f) * (0.25f + openTooth * 0.75f);

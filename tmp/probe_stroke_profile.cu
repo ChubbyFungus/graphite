@@ -16,7 +16,7 @@
 #include <cmath>
 #include <vector>
 
-static StrokePacket makePacket(float x, float y, float pressure, float strokeDist)
+static StrokePacket makePacket(float x, float y, float pressure, float strokeDist, float speed)
 {
     StrokePacket p{};
     p.x = x;
@@ -27,19 +27,23 @@ static StrokePacket makePacket(float x, float y, float pressure, float strokeDis
     p.tiltX = 26.0f;   // match Zac's real pen posture from the CSV
     p.tiltY = -11.0f;
     p.strokeDistancePx = strokeDist;
+    p.speed = speed;
     return p;
 }
 
 static void runStroke(CudaGraphiteBackend& backend, ToolParams& params,
                       float y, float step, float lengthPx, float pressure)
 {
+    // Packets arrive ~every 4ms (250 Hz, matches real capture), so hand
+    // speed in px/s follows directly from the step size.
+    const float speed = step / 0.004f;
     float dist = 0.0f;
-    StrokePacket prev = makePacket(20.0f, y, pressure, dist);
+    StrokePacket prev = makePacket(20.0f, y, pressure, dist, speed);
     backend.beginFrame();
     for (float x = 20.0f + step; x <= 20.0f + lengthPx; x += step)
     {
         dist += step;
-        StrokePacket next = makePacket(x, y, pressure, dist);
+        StrokePacket next = makePacket(x, y, pressure, dist, speed);
         backend.submitStrokeSegment(prev, next, params);
         prev = next;
     }
